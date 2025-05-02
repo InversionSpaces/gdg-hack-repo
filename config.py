@@ -1,0 +1,3 @@
+PROJECT_ID = "gdg-hack-458611"
+LOCATION = "eu"
+PROCESSOR_ID = "71c340b48c015fa1"
