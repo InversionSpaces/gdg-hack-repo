@@ -4,3 +4,4 @@ key.json
 result.json
 *.pdf
 *.txt
+!requirements.txt
