@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
         """)
 
     def initUI(self):
-        self.setWindowTitle('Document Viewer with AI Assistant')
+        self.setWindowTitle('Notes Reader')
         self.setGeometry(100, 100, 1200, 800)
 
         # Create central widget and layout
