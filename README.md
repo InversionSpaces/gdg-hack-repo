@@ -1,6 +1,6 @@
 # Notes Reader - GDG Hackathon 2025 Solution
 
-A powerful document analysis and question-answering application built with PyQt6 and Google Cloud AI services. This application allows users to upload documents (PDF, images, text files) and ask questions about their content, with AI-powered responses and visual document navigation.
+A powerful document analysis and question-answering application built with PyQt6 and Google Cloud AI services. This application allows users to upload lecture notes (PDF, images, text files) and ask questions about their content, with AI-powered responses and visual navigation. Perfect for exam preparation.
 
 ## Demo Video
 
