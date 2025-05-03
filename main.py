@@ -1,8 +1,12 @@
-from google.api_core.client_options import ClientOptions
-from google.cloud import documentai
+from vertexai import rag
+from vertexai.generative_models import GenerativeModel, Tool
+import vertexai
+from google.cloud import storage
+import os
 
-from utils import draw_polygons_on_pdf
-from config import PROJECT_ID, LOCATION, PROCESSOR_ID
+from config import PROJECT_ID, PROCESSOR_ID
+
+LOCATION = "us-central1"
 
 # The local file in your current working directory
 FILE_PATH = "sample.pdf"
@@ -10,31 +14,131 @@ FILE_PATH = "sample.pdf"
 # for supported file types
 MIME_TYPE = "application/pdf"
 
-# Instantiates a client
-docai_client = documentai.DocumentProcessorServiceClient(
-    client_options=ClientOptions(api_endpoint=f"{LOCATION}-documentai.googleapis.com")
+# Google Cloud Storage bucket name
+BUCKET_NAME = f"{PROJECT_ID}-rag-files"
+
+# Initialize Vertex AI API once per session
+print("Initializing Vertex AI API...")
+vertexai.init(project=PROJECT_ID, location=LOCATION)
+print("Vertex AI API initialized")
+
+gcs_uri = "gs://gdg-hack-458611-rag-files/sample.pdf"
+if not gcs_uri:
+    # Upload file to Google Cloud Storage
+    print("Uploading file to Google Cloud Storage...")
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(BUCKET_NAME)
+    if not bucket.exists():
+        bucket = storage_client.create_bucket(BUCKET_NAME, location=LOCATION)
+
+    blob_name = os.path.basename(FILE_PATH)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(FILE_PATH)
+    gcs_uri = f"gs://{BUCKET_NAME}/{blob_name}"
+    print(f"File uploaded to: {gcs_uri}")
+else:
+    print("Using existing GCS URI: ", gcs_uri)
+
+# Create RagCorpus
+# Configure embedding model, for example "text-embedding-005".
+embedding_model_config = rag.RagEmbeddingModelConfig(
+    vertex_prediction_endpoint=rag.VertexPredictionEndpoint(
+        publisher_model="publishers/google/models/text-embedding-005"
+    )
 )
 
-# The full resource name of the processor, e.g.:
-# projects/project-id/locations/location/processor/processor-id
-# You must create new processors in the Cloud Console first
-RESOURCE_NAME = docai_client.processor_path(PROJECT_ID, LOCATION, PROCESSOR_ID)
+corpus_name = "projects/127984195966/locations/us-central1/ragCorpora/2305843009213693952"
+if not corpus_name:
+    print("Creating RagCorpus...")
+    rag_corpus = rag.create_corpus(
+        display_name=corpus_name,
+        backend_config=rag.RagVectorDbConfig(
+            rag_embedding_model_config=embedding_model_config
+        ),
+    )
+    print("RagCorpus created, name: ", rag_corpus.name)
+else:
+    print("Getting RagCorpus...")
+    rag_corpus = rag.get_corpus(corpus_name)
+    print("RagCorpus found, name: ", rag_corpus.name)
 
-# Read the file into memory
-with open(FILE_PATH, "rb") as image:
-    image_content = image.read()
+print("Deleting files from RagCorpus...")
+files = rag.list_files(corpus_name=rag_corpus.name)
+for file in files:
+    print("Deleting file: ", file.name)
+    rag.delete_file(file.name, corpus_name=rag_corpus.name)
+    print("File deleted")
 
-# Load Binary Data into Document AI RawDocument Object
-raw_document = documentai.RawDocument(content=image_content, mime_type=MIME_TYPE)
+parser_processor_name = f"projects/127984195966/locations/us/processors/{PROCESSOR_ID}"
 
-# Configure the process request
-request = documentai.ProcessRequest(name=RESOURCE_NAME, raw_document=raw_document)
+print("Importing files to RagCorpus...")
+result = rag.import_files(
+    corpus_name=rag_corpus.name,
+    paths=[gcs_uri],
+    transformation_config = rag.TransformationConfig(
+        chunking_config=rag.ChunkingConfig(
+            chunk_size=512,  # Optional
+            chunk_overlap=100,  # Optional
+        ),
+    ),
+    max_embedding_requests_per_min=900,  # Optional
+    parser=rag.OCRParserConfig(
+        processor_name=parser_processor_name,
+        max_parsing_requests_per_min=120,  # Optional
+    )
+)
+print("Files imported to RagCorpus:")
+print(result)
+print(result.partial_failures_gcs_path)
 
-# Use the Document AI client to process the sample form
-result = docai_client.process_document(request=request)
+question = "Quel est le nom du personne dans le document?"
 
-document_object = result.document
-print("Document processing complete.")
-print(f"Text: {document_object.text}")
+# Direct context retrieval
+rag_retrieval_config = rag.RagRetrievalConfig(
+    top_k=10,  # Optional
+    # filter=rag.Filter(vector_distance_threshold=0.5),  # Optional
+)
 
-draw_polygons_on_pdf(FILE_PATH, "output.pdf", document_object)
+print("Retrieving context...")
+response = rag.retrieval_query(
+    rag_resources=[
+        rag.RagResource(
+            rag_corpus=rag_corpus.name,
+            # Optional: supply IDs from `rag.list_files()`.
+            # rag_file_ids=["rag-file-1", "rag-file-2", ...],
+        )
+    ],
+    text=question,
+    rag_retrieval_config=rag_retrieval_config,
+)
+print("Context retrieved:")
+print(response)
+print(len(response.contexts.contexts))
+
+# Enhance generation
+# Create a RAG retrieval tool
+rag_retrieval_tool = Tool.from_retrieval(
+    retrieval=rag.Retrieval(
+        source=rag.VertexRagStore(
+            rag_resources=[
+                rag.RagResource(
+                    rag_corpus=rag_corpus.name,  # Currently only 1 corpus is allowed.
+                    # Optional: supply IDs from `rag.list_files()`.
+                    # rag_file_ids=["rag-file-1", "rag-file-2", ...],
+                )
+            ],
+            rag_retrieval_config=rag_retrieval_config,
+        ),
+    )
+)
+
+# Create a Gemini model instance
+rag_model = GenerativeModel(
+    model_name="gemini-2.0-flash-001", tools=[rag_retrieval_tool]
+)
+
+# Generate response
+print("Generating response...")
+response = rag_model.generate_content(question)
+print("Response generated:")
+print(response.text)

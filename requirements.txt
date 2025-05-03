@@ -2,4 +2,6 @@ google-cloud-documentai==3.5.0
 google-api-core==2.24.2
 google-auth==2.39.0
 google-cloud-core==2.4.3
+google-cloud-aiplatform==1.91.0
+google-cloud-storage==2.15.0
 PyMuPDF==1.25.5

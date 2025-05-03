@@ -5,3 +5,4 @@ result.json
 *.pdf
 *.txt
 !requirements.txt
+samples/
