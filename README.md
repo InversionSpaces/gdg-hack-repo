@@ -2,6 +2,10 @@
 
 A powerful document analysis and question-answering application built with PyQt6 and Google Cloud AI services. This application allows users to upload documents (PDF, images, text files) and ask questions about their content, with AI-powered responses and visual document navigation.
 
+## Demo Video
+
+[![Watch the demo](./thumbnail.png)](./demo.mp4)
+
 ## Features
 
 - 📄 Multi-format document support (PDF, JPG, JPEG, PNG, TXT)
@@ -9,13 +13,17 @@ A powerful document analysis and question-answering application built with PyQt6
 - ❓ AI-powered question answering
 - 📑 Visual document navigation with highlighted relevant sections
 
+## Samples
+
+There are some samples to test the app in the [samples](./samples/) folder.
+
 ## Google Cloud Setup
 
 This application requires the following Google Cloud services and setup:
 
 1. **Google Cloud Project**
    - Create a new project or use an existing one
-   - Project ID: `gdg-hack-458611` (or update in `processing/config.py`)
+   - Update `PROJECT_ID` in `processing/config.py`
 
 2. **Required APIs**
    - Enable the following APIs in your Google Cloud Console:
@@ -71,10 +79,6 @@ This application requires the following Google Cloud services and setup:
 3. Ask questions about the document content in the input field
 4. View answers and navigate through relevant document sections
 
-## Demo Video
-
-[demo.mp4](./demo.mp4)
-
 ## Architecture
 
 The application consists of several key components:
@@ -82,11 +86,6 @@ The application consists of several key components:
 - **Document Processing**: Uses Google Cloud Document AI for text extraction and analysis
 - **Question Answering**: Leverages Gemini AI for intelligent responses
 - **UI Framework**: Built with PyQt6 for a modern, responsive interface
-- **Background Processing**: Implements QThread for non-blocking operations
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
