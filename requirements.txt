@@ -3,3 +3,6 @@ google-api-core==2.24.2
 google-auth==2.39.0
 google-cloud-core==2.4.3
 PyMuPDF==1.25.5
+google-cloud-aiplatform==1.91.0
+scikit-learn==1.6.1
+google-genai==1.13.0

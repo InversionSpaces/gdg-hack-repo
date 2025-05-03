@@ -1,3 +1,6 @@
 PROJECT_ID = "gdg-hack-458611"
 LOCATION = "eu"
-PROCESSOR_ID = "71c340b48c015fa1"
+OCR_PROCESSOR_ID = "37961ab285b5b21b"
+
+EMBEDDING_MODEL_ID = "text-embedding-005"
+ANSWER_MODEL_ID = "gemini-2.0-flash-001"
