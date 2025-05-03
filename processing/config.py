@@ -1,5 +1,6 @@
 PROJECT_ID = "gdg-hack-458611"
 LOCATION = "eu"
+VERTEXAI_LOCATION = "europe-west1"
 OCR_PROCESSOR_ID = "37961ab285b5b21b"
 
 EMBEDDING_MODEL_ID = "text-embedding-005"
