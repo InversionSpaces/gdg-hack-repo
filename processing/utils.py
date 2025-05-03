@@ -2,9 +2,10 @@ import fitz
 from google.cloud.documentai_v1.types import Document
 
 class Paragraph:
-    def __init__(self, text: str, layout):
+    def __init__(self, text: str, points, page_number: int):
         self.text = text
-        self.layout = layout
+        self.points = points
+        self.page_number = page_number
 
 def get_paragraphs(document: Document):
     paragraphs = []
@@ -15,7 +16,8 @@ def get_paragraphs(document: Document):
             text = ""
             for segment in segments:
                 text += document.text[segment.start_index:segment.end_index]
-            paragraphs.append(Paragraph(text, paragraph.layout))
+            normalized_points = [(v.x, v.y) for v in paragraph.layout.bounding_poly.normalized_vertices]
+            paragraphs.append(Paragraph(text, normalized_points, page.page_number - 1))
     return paragraphs
 
 # def request_embeddings(model: TextEmbeddingModel, texts: List[str]):

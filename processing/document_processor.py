@@ -96,7 +96,7 @@ class DocumentProcessor:
             
         try:
             # Get response from Gemini
-            response = self.get_gemini_response(question)
+            response = self.get_response(question)
             
             # Extract relevant paragraphs based on the response
             paragraphs_ids = response.get("paragraphs_ids", [])
@@ -116,15 +116,10 @@ class DocumentProcessor:
         self.paragraphs = []
         # self.embeddings = []
 
-    def get_gemini_response(self, question: str):
+    def get_response(self, question: str):
         # Format the prompt with context and question
         
         context_str = '\n'.join([f"{i}: {paragraph.text}" for i, paragraph in enumerate(self.paragraphs)])
-        
-        print("Context:")
-        print(context_str)
-        print("Question:")
-        print(question)
         
         systemInstruction = Content(
             parts=[

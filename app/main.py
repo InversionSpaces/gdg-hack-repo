@@ -55,9 +55,9 @@ class AnswerThread(QThread):
 class PDFViewer(QWidget):
     def __init__(self, processor):
         super().__init__()
-        self.current_pdf = None
         self.current_page = 0
-        self.combined_pdf = None
+        self.base_pdf = None
+        self.displaying_pdf = None
         self.processor = processor
         self.processing_thread = None
         self.loading_overlay = LoadingOverlay(self)
@@ -110,7 +110,7 @@ class PDFViewer(QWidget):
         progress = QProgressDialog("Processing files...", "Cancel", 0, len(files), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         
-        self.combined_pdf = fitz.open()
+        self.base_pdf = fitz.open()
         
         for i, file_path in enumerate(files):
             if progress.wasCanceled():
@@ -122,7 +122,7 @@ class PDFViewer(QWidget):
             try:
                 if file_path.lower().endswith(('.pdf')):
                     doc = fitz.open(file_path)
-                    self.combined_pdf.insert_pdf(doc)
+                    self.base_pdf.insert_pdf(doc)
                     doc.close()
                     
                 elif file_path.lower().endswith(('.jpg', '.jpeg', '.png')):
@@ -130,14 +130,14 @@ class PDFViewer(QWidget):
                     img_bytes = io.BytesIO()
                     img.save(img_bytes, format='PDF')
                     img_doc = fitz.open(stream=img_bytes.getvalue(), filetype="pdf")
-                    self.combined_pdf.insert_pdf(img_doc)
+                    self.base_pdf.insert_pdf(img_doc)
                     img_doc.close()
                     
                 elif file_path.lower().endswith('.txt'):
                     with open(file_path, 'r', encoding='utf-8') as f:
                         text = f.read()
                     
-                    page = self.combined_pdf.new_page()
+                    page = self.base_pdf.new_page()
                     page.insert_text((50, 50), text)
                     
             except Exception as e:
@@ -145,8 +145,8 @@ class PDFViewer(QWidget):
         
         progress.setValue(len(files))
         
-        if self.combined_pdf.page_count > 0:
-            self.current_pdf = self.combined_pdf
+        if self.base_pdf.page_count > 0:
+            self.displaying_pdf = self.base_pdf
             self.current_page = 0
             self.display_page()
             
@@ -154,13 +154,15 @@ class PDFViewer(QWidget):
             self.process_combined_pdf()
 
     def process_combined_pdf(self):
-        if self.combined_pdf:
+        if self.base_pdf:
+            self.displaying_pdf = self.base_pdf
+
             # Show loading overlay
             self.loading_overlay.show()
             self.setEnabled(False)
             
             # Save the combined PDF to memory
-            pdf_bytes = self.combined_pdf.tobytes()
+            pdf_bytes = self.base_pdf.tobytes()
             
             # Start processing in background thread
             self.processing_thread = ProcessingThread(self.processor, pdf_bytes)
@@ -182,8 +184,8 @@ class PDFViewer(QWidget):
             print(f"Error: {message}")
 
     def display_page(self):
-        if self.current_pdf and 0 <= self.current_page < len(self.current_pdf):
-            page = self.current_pdf[self.current_page]
+        if self.displaying_pdf and 0 <= self.current_page < len(self.displaying_pdf):
+            page = self.displaying_pdf[self.current_page]
             pix = page.get_pixmap()
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(img)
@@ -192,14 +194,74 @@ class PDFViewer(QWidget):
             ))
 
     def prev_page(self):
-        if self.current_pdf and self.current_page > 0:
+        if self.displaying_pdf and self.current_page > 0:
             self.current_page -= 1
             self.display_page()
 
     def next_page(self):
-        if self.current_pdf and self.current_page < len(self.current_pdf) - 1:
+        if self.displaying_pdf and self.current_page < len(self.displaying_pdf) - 1:
             self.current_page += 1
             self.display_page()
+
+    def create_highlighted_pdf(self, relevant_paragraphs):
+        """Create a new PDF with highlighted relevant paragraphs"""
+        if not self.base_pdf:
+            return False
+
+        # Create a copy of the current PDF
+        highlighted_pdf = fitz.open()
+        highlighted_pdf.insert_pdf(self.base_pdf)
+
+        # Draw bounding boxes for relevant paragraphs
+        for paragraph in relevant_paragraphs:
+            pdf_page = highlighted_pdf[paragraph.page_number]
+            
+            # Get page dimensions
+            width = pdf_page.rect.width
+            height = pdf_page.rect.height
+
+            points = [(p[0] * width, p[1] * height) for p in paragraph.points]
+                    
+            # Draw the polygon with a semi-transparent yellow fill
+            # First draw the fill
+            # pdf_page.draw_polyline(points + [points[0]], color=(1, 1, 0), fill=(1, 1, 0, 0.3))
+            # Then draw the border
+            pdf_page.draw_polyline(points + [points[0]], color=(1, 0, 0), width=5.0)
+
+        self.displaying_pdf = highlighted_pdf
+
+        return True
+
+    def display_highlighted_pdf(self, relevant_paragraphs):
+        """Display the PDF with highlighted relevant paragraphs"""
+
+        if self.create_highlighted_pdf(relevant_paragraphs):
+            self.current_page = 0
+            self.display_page()
+
+    def answer_finished(self, result, status):
+        # Hide loading overlay and re-enable input
+        self.answer_loading_overlay.hide()
+        self.request_input.setEnabled(True)
+        self.update_send_button_state()
+        
+        if result:
+            response = result["answer"]
+            relevant_paragraphs = result["relevant_paragraphs"]
+            
+            # Display the PDF with highlighted relevant paragraphs
+            self.pdf_viewer.display_highlighted_pdf(relevant_paragraphs)
+            
+            # Format the response
+            formatted_response = f"Answer:\n{response}\n\n"
+            if relevant_paragraphs:
+                formatted_response += "Relevant paragraphs:\n"
+                for paragraph in relevant_paragraphs:
+                    formatted_response += f"- {paragraph}\n"
+            
+            self.response_text.setPlainText(formatted_response)
+        else:
+            self.response_text.setPlainText(f"Error: {status}")
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -302,8 +364,15 @@ class MainWindow(QMainWindow):
             response = result["answer"]
             relevant_paragraphs = result["relevant_paragraphs"]
             
+            # Display the PDF with highlighted relevant paragraphs
+            self.pdf_viewer.display_highlighted_pdf(relevant_paragraphs)
+            
             # Format the response
-            formatted_response = f"{response}"
+            formatted_response = f"{response}\n\n"
+            # if relevant_paragraphs:
+            #     formatted_response += "Relevant paragraphs:\n"
+            #     for paragraph in relevant_paragraphs:
+            #         formatted_response += f"- {paragraph}\n"
             
             self.response_text.setPlainText(formatted_response)
         else:
