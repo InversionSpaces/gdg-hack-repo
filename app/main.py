@@ -2,7 +2,8 @@ import sys
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QFileDialog, QTextEdit, 
-                            QScrollArea, QLabel, QProgressDialog, QFrame)
+                            QScrollArea, QLabel, QProgressDialog, QFrame, QTextBrowser,
+                            QScrollArea, QVBoxLayout)
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
 from PyPDF2 import PdfReader, PdfWriter
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QColor
@@ -239,35 +240,12 @@ class PDFViewer(QWidget):
             self.current_page = 0
             self.display_page()
 
-    def answer_finished(self, result, status):
-        # Hide loading overlay and re-enable input
-        self.answer_loading_overlay.hide()
-        self.request_input.setEnabled(True)
-        self.update_send_button_state()
-        
-        if result:
-            response = result["answer"]
-            relevant_paragraphs = result["relevant_paragraphs"]
-            
-            # Display the PDF with highlighted relevant paragraphs
-            self.pdf_viewer.display_highlighted_pdf(relevant_paragraphs)
-            
-            # Format the response
-            formatted_response = f"Answer:\n{response}\n\n"
-            if relevant_paragraphs:
-                formatted_response += "Relevant paragraphs:\n"
-                for paragraph in relevant_paragraphs:
-                    formatted_response += f"- {paragraph}\n"
-            
-            self.response_text.setPlainText(formatted_response)
-        else:
-            self.response_text.setPlainText(f"Error: {status}")
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.processor = DocumentProcessor()
         self.answer_thread = None
+        self.current_paragraphs = []  # Store current paragraphs for navigation
         self.initUI()
 
     def initUI(self):
@@ -319,9 +297,33 @@ class MainWindow(QMainWindow):
         response_label = QLabel("Response:")
         response_layout.addWidget(response_label)
         
-        self.response_text = QTextEdit()
+        # Create a scroll area for the response text
+        response_scroll = QScrollArea()
+        response_scroll.setWidgetResizable(True)
+        response_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        response_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Disable horizontal scroll
+        
+        # Create a container widget for the response content
+        response_container = QWidget()
+        response_container_layout = QVBoxLayout(response_container)
+        response_container_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        response_container_layout.setSpacing(5)  # Add some spacing between widgets
+        
+        # Response text
+        self.response_text = QTextBrowser()
         self.response_text.setReadOnly(True)
-        response_layout.addWidget(self.response_text)
+        self.response_text.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)  # Enable word wrap
+        response_container_layout.addWidget(self.response_text)
+        
+        # Paragraph buttons container
+        self.paragraph_buttons_container = QWidget()
+        self.paragraph_buttons_layout = QVBoxLayout(self.paragraph_buttons_container)
+        self.paragraph_buttons_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        self.paragraph_buttons_layout.setSpacing(5)  # Add some spacing between buttons
+        response_container_layout.addWidget(self.paragraph_buttons_container)
+        
+        response_scroll.setWidget(response_container)
+        response_layout.addWidget(response_scroll)
         
         right_layout.addWidget(response_frame)
         
@@ -354,6 +356,50 @@ class MainWindow(QMainWindow):
     def update_answer_progress(self, message):
         print(f"Progress: {message}")
 
+    def clear_paragraph_buttons(self):
+        """Clear all paragraph buttons"""
+        while self.paragraph_buttons_layout.count():
+            item = self.paragraph_buttons_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def create_paragraph_button(self, paragraph, index):
+        """Create a button for a paragraph"""
+        relevance = paragraph.relevance
+        button = QPushButton()
+        button.setMinimumHeight(40)  # Set minimum height for better visibility
+        button.setLayout(QHBoxLayout())
+        button.layout().setContentsMargins(10, 5, 10, 5)  # Increase horizontal padding
+        
+        label = QLabel(f"{relevance} (page {paragraph.page_number + 1})")
+        label.setWordWrap(True)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        label.setMinimumWidth(200)  # Set minimum width for the label
+        button.layout().addWidget(label)
+        
+        button.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                background-color: #f8f8f8;
+                max-width: 100%;
+            }
+            QPushButton:hover {
+                background-color: #e8e8e8;
+            }
+            QLabel {
+                padding: 0px;
+            }
+        """)
+        button.clicked.connect(lambda checked, p=paragraph: self.handle_paragraph_click(p))
+        return button
+
+    def handle_paragraph_click(self, paragraph):
+        """Handle clicks on paragraph buttons to navigate to the corresponding page"""
+        self.pdf_viewer.current_page = paragraph.page_number
+        self.pdf_viewer.display_page()
+
     def answer_finished(self, result, status):
         # Hide loading overlay and re-enable input
         self.answer_loading_overlay.hide()
@@ -362,21 +408,32 @@ class MainWindow(QMainWindow):
         
         if result:
             response = result["answer"]
-            relevant_paragraphs = result["relevant_paragraphs"]
+            paragraphs = result["paragraphs"]
+            self.current_paragraphs = paragraphs  # Store current paragraphs
             
             # Display the PDF with highlighted relevant paragraphs
-            self.pdf_viewer.display_highlighted_pdf(relevant_paragraphs)
+            self.pdf_viewer.display_highlighted_pdf(paragraphs)
             
-            # Format the response
-            formatted_response = f"{response}\n\n"
-            # if relevant_paragraphs:
-            #     formatted_response += "Relevant paragraphs:\n"
-            #     for paragraph in relevant_paragraphs:
-            #         formatted_response += f"- {paragraph}\n"
+            # Set the answer text
+            self.response_text.setPlainText(response)
             
-            self.response_text.setPlainText(formatted_response)
+            # Clear existing paragraph buttons
+            self.clear_paragraph_buttons()
+            
+            # Add a label for the paragraph list
+            paragraph_label = QLabel("Relevant information:")
+            self.paragraph_buttons_layout.addWidget(paragraph_label)
+            
+            # Create buttons for each paragraph
+            for paragraph in paragraphs:
+                button = self.create_paragraph_button(paragraph, len(self.paragraph_buttons_layout.children()))
+                self.paragraph_buttons_layout.addWidget(button)
+            
+            # Add a stretch to push buttons to the top
+            self.paragraph_buttons_layout.addStretch()
         else:
             self.response_text.setPlainText(f"Error: {status}")
+            self.clear_paragraph_buttons()
 
 def main():
     app = QApplication(sys.argv)

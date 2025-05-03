@@ -99,12 +99,16 @@ class DocumentProcessor:
             response = self.get_response(question)
             
             # Extract relevant paragraphs based on the response
-            paragraphs_ids = response.get("paragraphs_ids", [])
-            relevant_paragraphs = [self.paragraphs[i] for i in paragraphs_ids]
+            paragraphs_resp = response.get("paragraphs", [])
+            paragraphs = []
+            for p in paragraphs_resp:
+                paragraph = self.paragraphs[p["id"]]
+                paragraph.relevance = p["relevance"]
+                paragraphs.append(paragraph)
             
             return {
                 "answer": response.get("answer", ""),
-                "relevant_paragraphs": relevant_paragraphs
+                "paragraphs": paragraphs
             }, "Success"
             
         except Exception as e:
@@ -126,8 +130,9 @@ class DocumentProcessor:
                 Part.from_text(text="Provided context:"),
                 Part.from_text(text=context_str),
                 Part.from_text(text="Answer the question based on the context provided. " +
-                            "Return the answer and the paragraphs ids that are relevant to the answer." +
-                            "If there is no answer, state that you don't know and return an empty array of paragraphs ids.")
+                            "Return the answer and the paragraphs that are relevant to the answer." +
+                            "For each paragraph, return its id along with very concise (max 5 words) description of its relevance to the answer." +
+                            "If there is no answer, state that you don't know and return an empty array of paragraphs.")
             ]
         )
         contents = [
@@ -143,7 +148,14 @@ class DocumentProcessor:
             response_modalities = ["TEXT"],
             system_instruction=systemInstruction,
             response_mime_type = "application/json",
-            response_schema = {"type":"OBJECT","properties":{"answer":{"type":"STRING"},"paragraphs_ids":{"type":"ARRAY","items":{"type":"INTEGER"}}}}
+            response_schema = {
+                "type":"OBJECT",
+                "properties":{
+                    "answer":{"type":"STRING"},
+                    "paragraphs":{"type":"ARRAY","items":{"type":"OBJECT","properties":{"id":{"type":"INTEGER"},"relevance":{"type":"STRING"}}}},
+                    "page_number":{"type":"INTEGER"}
+                }
+            }
         ) 
         response = self.gemini_client.models.generate_content(
             model=ANSWER_MODEL_ID, 

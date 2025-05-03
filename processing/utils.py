@@ -6,6 +6,7 @@ class Paragraph:
         self.text = text
         self.points = points
         self.page_number = page_number
+        self.relevance = None
 
 def get_paragraphs(document: Document):
     paragraphs = []
