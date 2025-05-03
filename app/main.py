@@ -252,6 +252,97 @@ class MainWindow(QMainWindow):
         self.answer_thread = None
         self.current_paragraphs = []  # Store current paragraphs for navigation
         self.initUI()
+        
+        # Apply modern Material Design-inspired styles
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            
+            QWidget {
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            
+            QPushButton:disabled {
+                background-color: #BDBDBD;
+            }
+            
+            QTextEdit, QTextBrowser {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+                padding: 8px;
+                selection-background-color: #2196F3;
+                selection-color: white;
+            }
+            
+            QScrollArea {
+                border: none;
+                background-color: white;
+            }
+            
+            QFrame {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+            }
+            
+            QLabel {
+                color: #424242;
+            }
+            
+            QProgressDialog {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+            }
+            
+            QProgressBar {
+                border: 1px solid #E0E0E0;
+                border-radius: 2px;
+                text-align: center;
+            }
+            
+            QProgressBar::chunk {
+                background-color: #2196F3;
+            }
+
+            /* Response area specific styles */
+            QFrame#response_frame {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+            }
+
+            QTextBrowser#response_text {
+                background-color: white;
+                border: none;
+                border-radius: 0;
+                padding: 12px;
+            }
+
+            QScrollArea#response_scroll {
+                background-color: white;
+                border: none;
+            }
+
+            QWidget#response_container {
+                background-color: white;
+            }
+        """)
 
     def initUI(self):
         self.setWindowTitle('Document Viewer with AI Assistant')
@@ -296,6 +387,7 @@ class MainWindow(QMainWindow):
         
         # Response area
         response_frame = QFrame()
+        response_frame.setObjectName("response_frame")
         response_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         response_layout = QVBoxLayout(response_frame)
         
@@ -304,18 +396,21 @@ class MainWindow(QMainWindow):
         
         # Create a scroll area for the response text
         response_scroll = QScrollArea()
+        response_scroll.setObjectName("response_scroll")
         response_scroll.setWidgetResizable(True)
         response_scroll.setFrameShape(QFrame.Shape.NoFrame)
         response_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         # Create a container widget for the response content
         response_container = QWidget()
+        response_container.setObjectName("response_container")
         response_container_layout = QVBoxLayout(response_container)
         response_container_layout.setContentsMargins(0, 0, 0, 0)
         response_container_layout.setSpacing(5)
         
         # Response text
         self.response_text = QTextBrowser()
+        self.response_text.setObjectName("response_text")
         self.response_text.setReadOnly(True)
         self.response_text.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
         response_container_layout.addWidget(self.response_text)
@@ -368,34 +463,70 @@ class MainWindow(QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
 
+        # Add a styled label for the paragraph list
+        paragraph_label = QLabel("Relevant Information")
+        paragraph_label.setStyleSheet("""
+            QLabel {
+                color: #424242;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 12px 0 8px 0;
+            }
+        """)
+        self.paragraph_buttons_layout.addWidget(paragraph_label)
+
     def create_paragraph_button(self, paragraph):
         """Create a button for a paragraph"""
         relevance = paragraph.relevance
         button = QPushButton()
-        button.setMinimumHeight(40)
-        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # Make button expand horizontally
+        button.setMinimumHeight(50)  # Increased height for better touch targets
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         layout = QHBoxLayout(button)
-        layout.setContentsMargins(10, 5, 10, 5)
+        layout.setContentsMargins(12, 8, 12, 8)  # Increased padding
+        layout.setSpacing(8)  # Added spacing between elements
         
-        label = QLabel(f"{relevance} (page {paragraph.page_number + 1})")
+        # Create relevance indicator
+        relevance_indicator = QLabel()
+        relevance_indicator.setFixedSize(8, 8)
+        relevance_indicator.setStyleSheet("""
+            background-color: #2196F3;
+            border-radius: 4px;
+        """)
+        layout.addWidget(relevance_indicator)
+        
+        # Create text label
+        label = QLabel(f"Page {paragraph.page_number + 1} • Relevance: {relevance}")
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        label.setStyleSheet("""
+            color: #424242;
+            font-size: 14px;
+        """)
         layout.addWidget(label)
+        
+        # Add arrow icon
+        arrow = QLabel("→")
+        arrow.setStyleSheet("""
+            color: #757575;
+            font-size: 16px;
+        """)
+        layout.addWidget(arrow)
         
         button.setStyleSheet("""
             QPushButton {
                 text-align: left;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                background-color: #f8f8f8;
-                width: 100%;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                background-color: white;
+                margin: 4px 0;
             }
             QPushButton:hover {
-                background-color: #e8e8e8;
+                background-color: #F5F5F5;
+                border-color: #BDBDBD;
             }
-            QLabel {
-                padding: 0px;
+            QPushButton:pressed {
+                background-color: #EEEEEE;
             }
         """)
         button.clicked.connect(lambda checked, p=paragraph: self.handle_paragraph_click(p))
@@ -425,10 +556,6 @@ class MainWindow(QMainWindow):
             
             # Clear existing paragraph buttons
             self.clear_paragraph_buttons()
-            
-            # Add a label for the paragraph list
-            paragraph_label = QLabel("Relevant information:")
-            self.paragraph_buttons_layout.addWidget(paragraph_label)
             
             # Create buttons for each paragraph
             for paragraph in self.current_paragraphs:
