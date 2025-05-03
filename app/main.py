@@ -3,7 +3,7 @@ import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QFileDialog, QTextEdit, 
                             QScrollArea, QLabel, QProgressDialog, QFrame, QTextBrowser,
-                            QScrollArea, QVBoxLayout)
+                            QScrollArea, QVBoxLayout, QSizePolicy)
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
 from PyPDF2 import PdfReader, PdfWriter
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QColor
@@ -147,8 +147,8 @@ class PDFViewer(QWidget):
         progress.setValue(len(files))
         
         if self.base_pdf.page_count > 0:
-            self.displaying_pdf = self.base_pdf
             self.current_page = 0
+            self.displaying_pdf = self.base_pdf
             self.display_page()
             
             # Process the combined PDF in a background thread
@@ -204,7 +204,7 @@ class PDFViewer(QWidget):
             self.current_page += 1
             self.display_page()
 
-    def create_highlighted_pdf(self, relevant_paragraphs):
+    def create_highlighted_pdf(self, relevant_paragraphs, selected_paragraph = None):
         """Create a new PDF with highlighted relevant paragraphs"""
         if not self.base_pdf:
             return False
@@ -225,19 +225,24 @@ class PDFViewer(QWidget):
                     
             # Draw the polygon with a semi-transparent yellow fill
             # First draw the fill
-            # pdf_page.draw_polyline(points + [points[0]], color=(1, 1, 0), fill=(1, 1, 0, 0.3))
             # Then draw the border
             pdf_page.draw_polyline(points + [points[0]], color=(1, 0, 0), width=5.0)
+
+        if selected_paragraph:
+            pdf_page = highlighted_pdf[selected_paragraph.page_number]
+            width = pdf_page.rect.width
+            height = pdf_page.rect.height
+            points = [(p[0] * width, p[1] * height) for p in selected_paragraph.points]
+            pdf_page.draw_polyline(points + [points[0]], color=(0, 0, 1), fill=(0, 0, 1), fill_opacity=0.3)
 
         self.displaying_pdf = highlighted_pdf
 
         return True
 
-    def display_highlighted_pdf(self, relevant_paragraphs):
+    def display_highlighted_pdf(self, relevant_paragraphs, selected_paragraph = None):
         """Display the PDF with highlighted relevant paragraphs"""
 
-        if self.create_highlighted_pdf(relevant_paragraphs):
-            self.current_page = 0
+        if self.create_highlighted_pdf(relevant_paragraphs, selected_paragraph):
             self.display_page()
 
 class MainWindow(QMainWindow):
@@ -301,25 +306,25 @@ class MainWindow(QMainWindow):
         response_scroll = QScrollArea()
         response_scroll.setWidgetResizable(True)
         response_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        response_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Disable horizontal scroll
+        response_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         # Create a container widget for the response content
         response_container = QWidget()
         response_container_layout = QVBoxLayout(response_container)
-        response_container_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
-        response_container_layout.setSpacing(5)  # Add some spacing between widgets
+        response_container_layout.setContentsMargins(0, 0, 0, 0)
+        response_container_layout.setSpacing(5)
         
         # Response text
         self.response_text = QTextBrowser()
         self.response_text.setReadOnly(True)
-        self.response_text.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)  # Enable word wrap
+        self.response_text.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
         response_container_layout.addWidget(self.response_text)
         
         # Paragraph buttons container
         self.paragraph_buttons_container = QWidget()
         self.paragraph_buttons_layout = QVBoxLayout(self.paragraph_buttons_container)
-        self.paragraph_buttons_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
-        self.paragraph_buttons_layout.setSpacing(5)  # Add some spacing between buttons
+        self.paragraph_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        self.paragraph_buttons_layout.setSpacing(2)  # Reduce spacing between buttons
         response_container_layout.addWidget(self.paragraph_buttons_container)
         
         response_scroll.setWidget(response_container)
@@ -363,19 +368,20 @@ class MainWindow(QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
 
-    def create_paragraph_button(self, paragraph, index):
+    def create_paragraph_button(self, paragraph):
         """Create a button for a paragraph"""
         relevance = paragraph.relevance
         button = QPushButton()
-        button.setMinimumHeight(40)  # Set minimum height for better visibility
-        button.setLayout(QHBoxLayout())
-        button.layout().setContentsMargins(10, 5, 10, 5)  # Increase horizontal padding
+        button.setMinimumHeight(40)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # Make button expand horizontally
+        
+        layout = QHBoxLayout(button)
+        layout.setContentsMargins(10, 5, 10, 5)
         
         label = QLabel(f"{relevance} (page {paragraph.page_number + 1})")
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        label.setMinimumWidth(200)  # Set minimum width for the label
-        button.layout().addWidget(label)
+        layout.addWidget(label)
         
         button.setStyleSheet("""
             QPushButton {
@@ -383,7 +389,7 @@ class MainWindow(QMainWindow):
                 border: 1px solid #ccc;
                 border-radius: 3px;
                 background-color: #f8f8f8;
-                max-width: 100%;
+                width: 100%;
             }
             QPushButton:hover {
                 background-color: #e8e8e8;
@@ -397,6 +403,7 @@ class MainWindow(QMainWindow):
 
     def handle_paragraph_click(self, paragraph):
         """Handle clicks on paragraph buttons to navigate to the corresponding page"""
+        self.pdf_viewer.display_highlighted_pdf(self.current_paragraphs, paragraph)
         self.pdf_viewer.current_page = paragraph.page_number
         self.pdf_viewer.display_page()
 
@@ -408,11 +415,10 @@ class MainWindow(QMainWindow):
         
         if result:
             response = result["answer"]
-            paragraphs = result["paragraphs"]
-            self.current_paragraphs = paragraphs  # Store current paragraphs
+            self.current_paragraphs = result["paragraphs"]
             
             # Display the PDF with highlighted relevant paragraphs
-            self.pdf_viewer.display_highlighted_pdf(paragraphs)
+            self.pdf_viewer.display_highlighted_pdf(self.current_paragraphs)
             
             # Set the answer text
             self.response_text.setPlainText(response)
@@ -425,8 +431,8 @@ class MainWindow(QMainWindow):
             self.paragraph_buttons_layout.addWidget(paragraph_label)
             
             # Create buttons for each paragraph
-            for paragraph in paragraphs:
-                button = self.create_paragraph_button(paragraph, len(self.paragraph_buttons_layout.children()))
+            for paragraph in self.current_paragraphs:
+                button = self.create_paragraph_button(paragraph)
                 self.paragraph_buttons_layout.addWidget(button)
             
             # Add a stretch to push buttons to the top
